@@ -371,7 +371,7 @@ function SWEP:Penetrate( att, tr, dmg, penetration, normal)
 	print("Left wall after " .. currentTraceLength .. " units. Remaining Penetration = " .. penetration .. " units")
    end
    
-   if (penetration <= 0.01 OR !leftWall) then return end
+   if (penetration <= 0.01 or !leftWall) then return end
    
    local bullet = {}
    bullet.Num    = numbul

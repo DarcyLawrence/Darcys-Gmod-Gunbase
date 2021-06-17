@@ -34,6 +34,12 @@ SWEP.Primary.ClipMax      	= 60
 SWEP.Primary.DefaultClip   	= 20
 SWEP.Primary.Sound         	= Sound( "Weapon_M4A1.Single" )
 
+SWEP.Primary.FalloffMin		= 1000
+SWEP.Primary.FalloffMax		= 2000
+SWEP.Primary.Falloffscale	= .8
+
+SWEP.Primary.Penetration    = 100
+
 SWEP.Secondary.Automatic	= false
 
 SWEP.Primary.NumBullets		= 1
@@ -93,7 +99,8 @@ SWEP.Spray = {
 SWEP.SprayIndex = 1;
 SWEP.SprayReductionSpeed = 0.5;
 
-
+SWEP.DebugDamage = 0;
+SWEP.DebugShotDistance = 0;
 	
 if CLIENT then
 	local smokeparticle = Model("particle/particle_smokegrenade");
@@ -183,7 +190,7 @@ if CLIENT then
 			p:SetCollide(true)
 			p:SetBounce(0.4)
 
-			p:SetLighting(false)
+			p:SetLighting(true)
 		end
 
 	
@@ -192,8 +199,8 @@ if CLIENT then
 end
 
 function SWEP:Think()
-		self:AdjustSpread(-self.SpreadReductionSpeed)  
 		self:AdjustRecoil(-self.RecoilReductionSpeed)
+		self.DebugDamage = self.DebugDamage
 
 		if CurTime() > self:GetNextPrimaryFire() + self.Primary.Delay then
 			self:UpdateSprayIndex(-self.SprayReductionSpeed)
@@ -201,12 +208,16 @@ function SWEP:Think()
 
 	hook.Add( "HUDPaint", "drawsometext", function()
 
-
-
 	surface.SetFont( "DebugFont" )
 	surface.SetTextColor( 255, 255, 255 )
 	surface.SetTextPos( 128, 128 ) 
-	surface.DrawText( "Spray Index: " .. self.SprayIndex)
+	surface.DrawText( "Spray Index: " .. math.Round(self.SprayIndex))
+
+	surface.SetTextPos( 128, 96 ) 
+	surface.DrawText( "Last Shot Damage: " .. self.DebugDamage)
+
+	surface.SetTextPos( 128, 64 ) 
+	surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
 end )
 end
 
@@ -230,7 +241,6 @@ function SWEP:PrimaryAttack()
 		self:TakePrimaryAmmo(1)
 
 		self:Recoil();
-		self:AdjustSpread(self.Spread);
 
 		self:UpdateSprayIndex(1)
 
@@ -263,6 +273,10 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 	bullet.AmmoType = ammo_type || self.Primary.Ammo
 
 	bullet.Callback = function ( att, tr, dmg )
+		self:Falloff( att, tr, dmg)
+		self.DebugDamage = dmg:GetDamage()
+		self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormalized())
+
 		if CLIENT and !tr.HitSky then
 			self:CreateSmoke(tr.HitPos)
 		end
@@ -285,18 +299,100 @@ function SWEP:Recoil()
 	eyeAngle.p = eyeAngle.p + vRecoil;
 	eyeAngle.y = eyeAngle.y - hRecoil;
 	
-
-	
-
 	local recoilAngle = Angle(vRecoil, hRecoil, 0)
 	
 	--owner:SetEyeAngles(eyeAngle)
 	--owner:SetViewPunchVelocity(recoilAngle)
 	owner:ViewPunch(recoilAngle)
 
-	
-
 	self:AdjustRecoil(0.4)
+end
+
+function SWEP:Falloff( att, tr , dmg)
+
+	-- Apply bullet falloff
+	if att and att:IsValid() then
+		local dist = (tr.HitPos - tr.StartPos):Length()
+		self.DebugShotDistance = dist;
+
+		if self.Primary.FalloffMin > -1 and self.Primary.FalloffMax > -1 then
+			if dist > self.Primary.FalloffMin then
+				local addedScale = (1-self.Primary.Falloffscale)*(1-(dist/self.Primary.FalloffMax))
+				local scaledDamage = self.Primary.Falloffscale + addedScale
+
+				if scaledDamage <= self.Primary.Falloffscale then 
+					scaledDamage = self.Primary.Falloffscale 
+				end
+
+				if scaledDamage >= 1 then 
+					scaledDamage = 1 
+				end
+
+				dmg:ScaleDamage(scaledDamage) 
+			end
+		end
+	end
+end
+
+function SWEP:Penetrate( att, tr, dmg, penetration, normal)
+
+   if penetration <= 0.01 then return end
+
+   local src = {};
+   local leftWall = false;
+
+   local currentTraceLength = 1;
+
+   local trace		= {}
+	trace.start   	= tr.HitPos
+	trace.endpos   = trace.start + tr.Normal
+	trace.mask     = MASK_SHOT
+
+	local currentTrace = util.TraceLine(trace)
+
+   while currentTraceLength < penetration and !leftWall do
+	
+	currentTrace = util.TraceLine(trace)
+	--print(currentTrace.FractionLeftSolid)
+
+	if !currentTrace.HitWorld and !currentTrace.Contents != 1 then
+		leftWall = true
+	else
+		trace.start = trace.endpos
+		trace.endpos = trace.endpos+tr.Normal
+
+		currentTraceLength = currentTraceLength+1;
+	end
+   end
+   
+   penetration = (penetration-currentTraceLength)
+
+    if SERVER then
+	print("Left wall after " .. currentTraceLength .. " units. Remaining Penetration = " .. penetration .. " units")
+   end
+   
+   if (penetration <= 0.01 OR !leftWall) then return end
+   
+   local bullet = {}
+   bullet.Num    = numbul
+   bullet.Src    = trace.endpos-tr.Normal
+   bullet.Dir    = tr.Normal	
+   bullet.Spread = Vector( cone, cone, 0 )
+   bullet.Tracer = 0
+   bullet.Force  = 10
+   bullet.Damage = self.Primary.Damage/2
+   bullet.IgnoreEntity = tr.Entity
+
+   bullet.Callback = function ( att, tr, dmg ) 
+	if CLIENT and !tr.HitSky then
+			self:CreateSmoke(tr.HitPos)
+		end
+
+      --self:Falloff( att, tr, dmg)
+      self:Penetrate( att, tr, dmg, penetration, normal) 
+   end
+   
+   timer.Simple(0, function() att:FireBullets(bullet) end)
 end
 
 function SWEP:ADS()
@@ -317,18 +413,6 @@ function SWEP:UpdateSprayIndex(value)
 	end
 
 	self.SprayIndex = newSpray
-end
-
-function SWEP:AdjustSpread(newSpread)
-	local spread = self.CurrSpread+newSpread
-	
-	if spread > self.MaxSpread then
-		spread = self.MaxSpread
-	elseif spread < 0 then
-		spread = 0
-	end
-	
-	self.CurrSpread = spread;
 end
 
 function SWEP:AdjustRecoil(newRecoil)
@@ -412,7 +496,6 @@ end
 SWEP.CurrIronSightPos = Vector(0,0,0);
 SWEP.CurrEyeRot = 0;
 SWEP.isIronsights = false;
-SWEP.CurrSpread = 0;
 
 function SWEP:GetViewModelPosition(EyePos, EyeAng)
 	if CLIENT then

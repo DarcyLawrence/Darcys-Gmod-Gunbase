@@ -1,6 +1,6 @@
 AddCSLuaFile()
 
-SWEP.HoldType              	= "ar2"
+SWEP.HoldType              	= "physgun"
 
 if CLIENT then
    SWEP.PrintName          	= "JL_Base"
@@ -44,7 +44,7 @@ SWEP.Secondary.Automatic	= false
 
 SWEP.Primary.NumBullets		= 1
 
-SWEP.Primary.Force			= 10
+SWEP.Primary.Force			= 0.1
 
 SWEP.Primary.Tracer			= 1
 
@@ -101,6 +101,10 @@ SWEP.SprayReductionSpeed = 0.5;
 
 SWEP.DebugDamage = 0;
 SWEP.DebugShotDistance = 0;
+
+function SWEP:Initialize()
+	self:SetHoldType("ar2")
+end
 	
 if CLIENT then
 	local smokeparticle = Model("particle/particle_smokegrenade");
@@ -123,20 +127,20 @@ if CLIENT then
 	outline = false,
 	})
 
-	function SWEP:CreateSmoke(center)
-		local em = ParticleEmitter(center)
+	function SWEP:CreateSmoke(tr)
+		local em = ParticleEmitter(tr.HitPos)
 	
 		--local r = self:GetRadius()
 
 		   --local prpos = VectorRand() * r
 		   --prpos.z = prpos.z + 32
-		   local p = em:Add(smokeparticle, center)
+		   local p = em:Add(smokeparticle, tr.HitPos)
 		   if p then
 			  local gray = math.random(200, 255)
 			  p:SetColor(gray, gray, gray)
 			  p:SetStartAlpha(200)
 			  p:SetEndAlpha(0)
-			  p:SetVelocity((self.Owner:GetAimVector()) * math.Rand(600, 800))
+			  p:SetVelocity(tr.HitNormal * math.Rand(200, 300))
 			  p:SetLifeTime(0)
 			  p:SetAirResistance(100)
 
@@ -157,6 +161,40 @@ if CLIENT then
 		   end
 
 	
+		em:Finish()
+	end
+
+	function SWEP:BloodSplatter(tr)
+		local em = ParticleEmitter(tr.HitPos)
+	
+		for i=1, 5 do
+ 			local p = em:Add(smokeparticle, tr.HitPos)
+			if p then
+				p:SetColor(200, 0, 0)
+				p:SetStartAlpha(1000)
+				p:SetEndAlpha(0)
+			
+				p:SetLifeTime(0)
+				p:SetAirResistance(100)
+				 p:SetVelocity(tr.Normal * math.Rand(700, 800))
+
+				p:SetGravity(Vector(0,0,150))
+				
+				p:SetDieTime(math.Rand(.4, .5))
+		
+				p:SetStartSize(math.random(5, 10))
+				p:SetEndSize(math.random(30, 40))
+				p:SetRoll(math.random(-180, 180))
+				p:SetRollDelta(math.Rand(-0.1, 0.1))
+				p:SetAirResistance(600)
+		
+				p:SetCollide(true)
+				p:SetBounce(0.4)
+		
+				p:SetLighting(false)
+		   end
+		end
+		  
 		em:Finish()
 	end
 
@@ -263,7 +301,7 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 	dir:Add(angle:Forward())
 
 	local bullet = {}
-	bullet.Num		= num_bullets
+	bullet.Num		= 1
 	bullet.Src		= self.Owner:GetShootPos()			-- Source
 	bullet.Dir		= dir-- Dir of bullet
 	bullet.Spread	= Vector( aimcone, aimcone, 0 )		-- Aim Cone
@@ -275,16 +313,57 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 	bullet.Callback = function ( att, tr, dmg )
 		self:Falloff( att, tr, dmg)
 		self.DebugDamage = dmg:GetDamage()
-		self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormalized())
+		
+		self:OnDoorShot(tr.Entity, dir);
+
+		self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
+		self:Ricochet( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
 
 		if CLIENT and !tr.HitSky then
-			self:CreateSmoke(tr.HitPos)
+			if(tr.HitGroup == 1) then
+				self:BloodSplatter(tr)
+			elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
+				self:CreateSmoke(tr)
+			end
 		end
 	end
 
 	self.Owner:FireBullets( bullet )
 
 	self:ShootEffects()
+end
+
+function SWEP:OnDoorShot(door)
+	if door:GetClass() == "prop_door_rotating" and !door:GetInternalVariable("m_bLocked") and SERVER then
+		local doorRagdoll = ents.Create("prop_physics")
+		doorRagdoll:SetModel(door:GetModel())
+		doorRagdoll:SetPos(door:GetPos())
+		doorRagdoll:SetAngles(door:GetAngles())
+		doorRagdoll:SetSkin(door:GetSkin())
+
+		PrintTable(door:GetSaveTable());
+		--This is a hack job to handle some doors that control VIS in an area.
+		--Basically hide everything about the door, disable collision and open it.
+		--Once its open, then delete it.
+		--WIP NEED FIX FOR DOUBLE DOORS
+		door:RemoveAllDecals();
+		door:SetSaveValue("soundcloseoverride", "NULL")
+		door:SetSaveValue("soundopenoverride", "NULL")
+		door:SetSaveValue("soundmoveoverride", "NULL")
+		door:Input("Open")
+		door:SetMaterial("NULL")
+		door:SetSolid(0);
+		
+		door:SetSaveValue("locked", true)
+		
+
+		if(door:GetInternalVariable("m_hMaster") != NULL) then
+			self:OnDoorShot(door:GetInternalVariable("m_hMaster"))
+		end
+
+		timer.Simple(1, function() door:Remove() end)
+		doorRagdoll:Spawn()
+	end
 end
 
 function SWEP:Recoil()
@@ -334,62 +413,104 @@ function SWEP:Falloff( att, tr , dmg)
 	end
 end
 
-function SWEP:Penetrate( att, tr, dmg, penetration, normal)
+function SWEP:Penetrate( att, tr, dmg, penetration, dir)
 
-   if penetration <= 0.01 then return end
+	if penetration <= 0.01 then return end
 
-   local src = {};
-   local leftWall = false;
+	local src = {};
+	local leftSolid = false;
 
-   local currentTraceLength = 1;
-
-   local trace		= {}
-	trace.start   	= tr.HitPos
-	trace.endpos   = trace.start + tr.Normal
-	trace.mask     = MASK_SHOT
-
-	local currentTrace = util.TraceLine(trace)
-
-   while currentTraceLength < penetration and !leftWall do
+	local traceResultLength = 1;
+	local trace	= {}
+	trace.mask	= MASK_SHOT
+	trace.start = tr.HitPos;
+	trace.endpos = tr.HitPos + dir;
 	
-	currentTrace = util.TraceLine(trace)
-	--print(currentTrace.FractionLeftSolid)
+	local traceResult;
 
-	if !currentTrace.HitWorld and !currentTrace.Contents != 1 then
-		leftWall = true
-	else
-		trace.start = trace.endpos
-		trace.endpos = trace.endpos+tr.Normal
+	--Determine the length of the trace in units
+	while traceResultLength < penetration and !leftSolid do
 
-		currentTraceLength = currentTraceLength+1;
+		traceResult = util.TraceLine(trace)
+
+		if(
+			(tr.Entity != NULL and traceResult.Entity != tr.Entity) or
+			(tr.Entity == NULL and !traceResult.HitWorld)
+		) then
+			leftSolid = true
+		else
+			trace.start = trace.endpos
+			trace.endpos = trace.endpos+dir
+
+			traceResultLength = traceResultLength+1;
+		end
 	end
-   end
-   
-   penetration = (penetration-currentTraceLength)
+
+   penetration = (penetration-traceResultLength)
 
     if SERVER then
-	print("Left wall after " .. currentTraceLength .. " units. Remaining Penetration = " .. penetration .. " units")
+	print("Left wall after " .. traceResultLength .. " units. Remaining Penetration = " .. penetration .. " units")
    end
    
-   if (penetration <= 0.01 or !leftWall) then return end
+   if (penetration <= 0.01 or !leftSolid) then return end
    
    local bullet = {}
    bullet.Num    = numbul
-   bullet.Src    = trace.endpos-tr.Normal
-   bullet.Dir    = tr.Normal	
+   bullet.Src    = trace.endpos-dir
+   bullet.Dir    = dir
    bullet.Spread = Vector( cone, cone, 0 )
    bullet.Tracer = 0
    bullet.Force  = 10
-   bullet.Damage = self.Primary.Damage/2
-   bullet.IgnoreEntity = tr.Entity
+   bullet.Damage = self.Primary.Damage*(self.Primary.Penetration/penetration)
+
+   if tr.Entity:IsPlayer() or tr.Entity:IsNPC() then
+   	bullet.IgnoreEntity = tr.Entity
+   end
 
    bullet.Callback = function ( att, tr, dmg ) 
 	if CLIENT and !tr.HitSky then
-			self:CreateSmoke(tr.HitPos)
+		if(tr.HitGroup == 1) then
+			self:BloodSplatter(tr)
+		elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
+			self:CreateSmoke(tr)
 		end
+	end
 
       --self:Falloff( att, tr, dmg)
-      self:Penetrate( att, tr, dmg, penetration, normal) 
+      self:Penetrate( att, tr, dmg, penetration, dir) 
+   end
+   
+   timer.Simple(0, function() att:FireBullets(bullet) end)
+end
+
+function SWEP:Ricochet( att, tr, dmg, penetration, dir )
+
+	local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
+
+   local bullet = {}
+   bullet.Num    = numbul
+   bullet.Src    = tr.HitPos
+   bullet.Dir    = reflectVector
+   bullet.Spread = Vector( cone, cone, 0 )
+   bullet.Tracer = 0
+   bullet.Force  = 10
+   bullet.Damage = self.Primary.Damage
+
+   if tr.Entity:IsPlayer() or tr.Entity:IsNPC() then
+   	bullet.IgnoreEntity = tr.Entity
+   end
+
+   bullet.Callback = function ( att, tr, dmg ) 
+	if CLIENT and !tr.HitSky then
+		if(tr.HitGroup == 1) then
+			self:BloodSplatter(tr)
+		elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
+			self:CreateSmoke(tr)
+		end
+	end
+
+      --self:Falloff( att, tr, dmg)
+      self:Penetrate( att, tr, dmg, penetration, dir) 
    end
    
    timer.Simple(0, function() att:FireBullets(bullet) end)

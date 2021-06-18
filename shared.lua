@@ -316,8 +316,20 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 		
 		self:OnDoorShot(tr.Entity, dir);
 
-		self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
-		self:Ricochet( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
+		local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
+		local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
+
+		print(reflectAngles)
+
+		if(
+		math.abs(reflectAngles.x) > 70 or 
+		math.abs(reflectAngles.y) > 70 or 
+		math.abs(reflectAngles.z) > 70) then
+
+			self:Ricochet( att, tr, dmg, self.Primary.Penetration, reflectVector )
+		else
+			self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
+		end
 
 		if CLIENT and !tr.HitSky then
 			if(tr.HitGroup == 1) then
@@ -331,6 +343,49 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 	self.Owner:FireBullets( bullet )
 
 	self:ShootEffects()
+end
+
+function SWEP:GenerateExtraBullets(traceResults, numbul, src, dir, spread, tracer, force, damage, penetration)
+	local bullet = {}
+	bullet.Num    = numbul
+	bullet.Src    = trace.endpos-tr.Normal
+	bullet.Dir    = tr.Normal
+	bullet.Spread = Vector( cone, cone, 0 )
+	bullet.Tracer = 0
+	bullet.Force  = 10
+	bullet.Damage = self.Primary.Damage*(self.Primary.Penetration/penetration)
+
+	if tr.Entity:IsPlayer() or tr.Entity:IsNPC() then
+		bullet.IgnoreEntity = tr.Entity
+	end
+
+	bullet.Callback = function ( att, tr, dmg ) 
+			if CLIENT and !tr.HitSky then
+				if(tr.HitGroup == 1) then
+					self:BloodSplatter(tr)
+				elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
+					self:CreateSmoke(tr)
+				end
+			end
+
+			--self:Falloff( att, tr, dmg)
+			local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
+			local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
+
+			print(reflectAngles)
+
+			if(
+			math.abs(reflectAngles.x) > 70 or 
+			math.abs(reflectAngles.y) > 70 or 
+			math.abs(reflectAngles.z) > 70) then
+
+				self:Ricochet( att, tr, dmg, self.Primary.Penetration, reflectVector )
+			else
+				self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
+			end
+	end
+   
+   timer.Simple(0, function() att:FireBullets(bullet) end)
 end
 
 function SWEP:OnDoorShot(door)
@@ -424,7 +479,7 @@ function SWEP:Penetrate( att, tr, dmg, penetration, dir)
 	local trace	= {}
 	trace.mask	= MASK_SHOT
 	trace.start = tr.HitPos;
-	trace.endpos = tr.HitPos + dir;
+	trace.endpos = tr.HitPos + tr.Normal;
 	
 	local traceResult;
 
@@ -440,7 +495,7 @@ function SWEP:Penetrate( att, tr, dmg, penetration, dir)
 			leftSolid = true
 		else
 			trace.start = trace.endpos
-			trace.endpos = trace.endpos+dir
+			trace.endpos = trace.endpos+tr.Normal
 
 			traceResultLength = traceResultLength+1;
 		end
@@ -454,43 +509,14 @@ function SWEP:Penetrate( att, tr, dmg, penetration, dir)
    
    if (penetration <= 0.01 or !leftSolid) then return end
    
-   local bullet = {}
-   bullet.Num    = numbul
-   bullet.Src    = trace.endpos-dir
-   bullet.Dir    = dir
-   bullet.Spread = Vector( cone, cone, 0 )
-   bullet.Tracer = 0
-   bullet.Force  = 10
-   bullet.Damage = self.Primary.Damage*(self.Primary.Penetration/penetration)
-
-   if tr.Entity:IsPlayer() or tr.Entity:IsNPC() then
-   	bullet.IgnoreEntity = tr.Entity
-   end
-
-   bullet.Callback = function ( att, tr, dmg ) 
-	if CLIENT and !tr.HitSky then
-		if(tr.HitGroup == 1) then
-			self:BloodSplatter(tr)
-		elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
-			self:CreateSmoke(tr)
-		end
-	end
-
-      --self:Falloff( att, tr, dmg)
-      self:Penetrate( att, tr, dmg, penetration, dir) 
-   end
    
-   timer.Simple(0, function() att:FireBullets(bullet) end)
 end
 
 function SWEP:Ricochet( att, tr, dmg, penetration, dir )
-
-	local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
-
    local bullet = {}
    bullet.Num    = numbul
    bullet.Src    = tr.HitPos
-   bullet.Dir    = reflectVector
+   bullet.Dir    = dir
    bullet.Spread = Vector( cone, cone, 0 )
    bullet.Tracer = 0
    bullet.Force  = 10
@@ -509,9 +535,19 @@ function SWEP:Ricochet( att, tr, dmg, penetration, dir )
 		end
 	end
 
-      --self:Falloff( att, tr, dmg)
-      self:Penetrate( att, tr, dmg, penetration, dir) 
-   end
+      	--self:Falloff( att, tr, dmg)
+      	local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
+		local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
+
+		if(
+		math.abs(reflectAngles.x) > 70 or 
+		math.abs(reflectAngles.y) > 70 or 
+		math.abs(reflectAngles.z) > 70) then
+
+			self:Ricochet( att, tr, dmg, self.Primary.Penetration, reflectVector )
+		else
+			self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
+		end
    
    timer.Simple(0, function() att:FireBullets(bullet) end)
 end

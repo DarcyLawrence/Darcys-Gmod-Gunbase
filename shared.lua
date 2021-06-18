@@ -13,18 +13,38 @@ if CLIENT then
 end
 
 SWEP.Base                  	= "weapon_base"
-
 SWEP.Kind                  	= WEAPON_HEAVY
 SWEP.WeaponID              	= AMMO_M16
+SWEP.IronSightsPos 			= Vector( -3.680, -12.2687, 6.88 )
+SWEP.IronSightsAng 			= Vector( -4.8723, -2.10, -2.5 )
+SWEP.BobScale 				= 0.1
+SWEP.SwayScale				= 0
+SWEP.RecoilReductionSpeed 	= .05
+SWEP.AutoSpawnable         	= true
+SWEP.Spawnable             	= true
+SWEP.AmmoEnt               	= "item_ammo_pistol_ttt"
+SWEP.UseHands              	= true
+SWEP.ViewModel             	= "models/weapons/soviet_carbine/soviet_carbine.mdl"
+SWEP.WorldModel            	= "models/weapons/soviet_carbine/w_soviet_carbine.mdl"
+SWEP.Spread					= .074
+SWEP.MaxSpread				= .20
+SWEP.SpreadReductionSpeed	= 0.01
+SWEP.Zoom					= 30
+SWEP.ADSSpeed				= .3
+SWEP.EyeRotateMax			= 5
+SWEP.SprayIndex 			= 1;
+SWEP.SprayReductionSpeed 	= 0.5;
+SWEP.DebugDamage 			= 0;
+SWEP.DebugShotDistance 		= 0;
+SWEP.CurrIronSightPos = Vector(0,0,0);
+SWEP.CurrEyeRot = 0;
+SWEP.isIronsights = false;
 
 SWEP.Primary.Delay         	= .1
-
 SWEP.Primary.LRecoil        = 1
 SWEP.Primary.RRecoil        = 1
 SWEP.Primary.URecoil        = 1
 SWEP.Primary.DRecoil        = 0
-SWEP.RecoilReductionSpeed = .05
-
 SWEP.Primary.Automatic     	= true
 SWEP.Primary.Ammo          	= "Pistol"
 SWEP.Primary.Damage        	= 23
@@ -33,45 +53,20 @@ SWEP.Primary.ClipSize      	= 20
 SWEP.Primary.ClipMax      	= 60
 SWEP.Primary.DefaultClip   	= 20
 SWEP.Primary.Sound         	= Sound( "Weapon_M4A1.Single" )
-
 SWEP.Primary.FalloffMin		= 1000
 SWEP.Primary.FalloffMax		= 2000
 SWEP.Primary.Falloffscale	= .8
-
+SWEP.Primary.Ricochets		= 1
 SWEP.Primary.Penetration    = 100
+SWEP.Primary.NumBullets		= 5
+SWEP.Primary.Force			= 10
+SWEP.Primary.Tracer			= 1
 
 SWEP.Secondary.Automatic	= false
 
-SWEP.Primary.NumBullets		= 1
-
-SWEP.Primary.Force			= 0.1
-
-SWEP.Primary.Tracer			= 1
-
-SWEP.AutoSpawnable         	= true
-SWEP.Spawnable             	= true
-SWEP.AmmoEnt               	= "item_ammo_pistol_ttt"
-
-SWEP.UseHands              	= true
-SWEP.ViewModel             	= "models/weapons/soviet_carbine/soviet_carbine.mdl"
-SWEP.WorldModel            	= "models/weapons/soviet_carbine/w_soviet_carbine.mdl"
-
-SWEP.IronSightsPos = Vector( -3.680, -12.2687, 6.88 )
-SWEP.IronSightsAng = Vector( -4.8723, -2.10, -2.5 )
-
-SWEP.BobScale 				= 0.1
-SWEP.SwayScale				= 0
-
-SWEP.Spread					= .074
-SWEP.MaxSpread				= .20
-SWEP.SpreadReductionSpeed	= 0.01
-
-SWEP.Zoom					= 30
-SWEP.ADSSpeed				= .3
-
-SWEP.EyeRotateMax			= 5
-
 currMov = 1;
+
+SWEP.DrawTrace = {};
 
 SWEP.Spray = {
 	[1] = {0, .5},
@@ -96,12 +91,6 @@ SWEP.Spray = {
 	[20] = {0, 3.6}
 }
 
-SWEP.SprayIndex = 1;
-SWEP.SprayReductionSpeed = 0.5;
-
-SWEP.DebugDamage = 0;
-SWEP.DebugShotDistance = 0;
-
 function SWEP:Initialize()
 	self:SetHoldType("ar2")
 end
@@ -109,22 +98,22 @@ end
 if CLIENT then
 	local smokeparticle = Model("particle/particle_smokegrenade");
 
-		surface.CreateFont("DebugFont", {
-	font = "Arial", --  Use the font-name which is shown to you by your operating system Font Viewer, not the file name
-	extended = false,
-	size = 32,
-	weight = 700,
-	blursize = 0,
-	scanlines = 0,
-	antialias = false,
-	underline = false,
-	italic = false,
-	strikeout = false,
-	symbol = false,
-	rotary = false,
-	shadow = false,
-	additive = false,
-	outline = false,
+	surface.CreateFont("DebugFont", {
+		font = "Arial", --  Use the font-name which is shown to you by your operating system Font Viewer, not the file name
+		extended = false,
+		size = 32,
+		weight = 700,
+		blursize = 0,
+		scanlines = 0,
+		antialias = false,
+		underline = false,
+		italic = false,
+		strikeout = false,
+		symbol = false,
+		rotary = false,
+		shadow = false,
+		additive = false,
+		outline = false,
 	})
 
 	function SWEP:CreateSmoke(tr)
@@ -237,54 +226,74 @@ if CLIENT then
 end
 
 function SWEP:Think()
-		self:AdjustRecoil(-self.RecoilReductionSpeed)
-		self.DebugDamage = self.DebugDamage
+	self:AdjustRecoil(-self.RecoilReductionSpeed)
+	self.DebugDamage = self.DebugDamage
 
-		if CurTime() > self:GetNextPrimaryFire() + self.Primary.Delay then
-			self:UpdateSprayIndex(-self.SprayReductionSpeed)
-		end
+	self.DrawTraceSize = self.DrawTraceSize;
+
+	if CurTime() > self:GetNextPrimaryFire() + self.Primary.Delay then
+		self:UpdateSprayIndex(-self.SprayReductionSpeed)
+	end
 
 	hook.Add( "HUDPaint", "drawsometext", function()
+		surface.SetFont( "DebugFont" )
+		surface.SetTextColor( 255, 255, 255 )
+		surface.SetTextPos( 128, 128 ) 
+		surface.DrawText( "Spray Index: " .. math.Round(self.SprayIndex))
 
-	surface.SetFont( "DebugFont" )
-	surface.SetTextColor( 255, 255, 255 )
-	surface.SetTextPos( 128, 128 ) 
-	surface.DrawText( "Spray Index: " .. math.Round(self.SprayIndex))
+		surface.SetTextPos( 128, 96 ) 
+		surface.DrawText( "Last Shot Damage: " .. self.DebugDamage)
 
-	surface.SetTextPos( 128, 96 ) 
-	surface.DrawText( "Last Shot Damage: " .. self.DebugDamage)
+		surface.SetTextPos( 128, 64 ) 
+		surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
+	end )
 
-	surface.SetTextPos( 128, 64 ) 
-	surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
-end )
+	--[[if SERVER then
+			hook.Add("PostDrawViewModel", "drawTraces", function()
+			for k, v in ipairs(self.DrawTrace) do
+				render.DrawLine( 
+					v.start, 
+					v.last, 
+					Color( 255, 255, 255 ), 
+					false )
+			end
+		end)
+	end]]
 end
 
 function SWEP:PrimaryAttack()
 
+	for i, v in pairs(self.DrawTrace) do
+			self.DrawTrace[i] = nil
+		end
+
 	if self:Clip1() > 0 then
 		local cone = (self.isIronsights and 0 or self.Primary.Cone)
 
+		local dir = self.Owner:GetAimVector()
+		local angle = dir:Angle()
+		angle = angle+self.Owner:GetViewPunchAngles()*2;
+
+		dir:Add(angle:Forward())
+
 		self:ShootBullet(
-			self.Primary.Damage, 
 			self.Primary.NumBullets, 
+			self.Owner:GetShootPos(),
+			dir,
 			cone, 
-			self.Primary.Ammo, 
+			self.Primary.Tracer,
 			self.Primary.Force, 
-			self.Primary.Tracer)
-			
-		--self:TakePrimaryAmmo(1)
+			self.Primary.Damage, 
+			self.Primary.Ammo, 
+			self.Primary.Penetration,
+			self.Primary.Ricochets
+		)
 
 		self.Weapon:EmitSound(self.Primary.Sound)
 		self:SetNextPrimaryFire(CurTime() + self.Primary.Delay)
 		self:TakePrimaryAmmo(1)
-
 		self:Recoil();
-
 		self:UpdateSprayIndex(1)
-
-		for i=1,self.Primary.ClipSize do
-			--print(self.Spray[i][1] .. ", " .. self.Spray[i][2])
-		end
 
 		if CLIENT then
 			--self:GunSmoke(self.Owner:GetPos()+Vector(0,0,60))
@@ -292,23 +301,25 @@ function SWEP:PrimaryAttack()
 	end
 end
 
-function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, tracer )
-
-	local dir = self.Owner:GetAimVector()
-	local angle = dir:Angle()
-	angle = angle+self.Owner:GetViewPunchAngles()*2;
-
-	dir:Add(angle:Forward())
+function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
+	force, damage, ammo_type, remainingPenetration, remainingRicochets, previousTrace)
 
 	local bullet = {}
-	bullet.Num		= 1
-	bullet.Src		= self.Owner:GetShootPos()			-- Source
-	bullet.Dir		= dir-- Dir of bullet
+	bullet.Num		= numBullets
+	bullet.Src		= src								-- Source
+	bullet.Dir		= dir								-- Dir of bullet
 	bullet.Spread	= Vector( aimcone, aimcone, 0 )		-- Aim Cone
 	bullet.Tracer	= tracer || 5						-- Show a tracer on every x bullets
 	bullet.Force	= force || 1						-- Amount of force to give to phys objects
 	bullet.Damage	= damage
 	bullet.AmmoType = ammo_type || self.Primary.Ammo
+
+	if 
+		previousTrace != nil and
+	 	(previousTrace.Entity:IsPlayer() or previousTrace.Entity:IsNPC()) 
+	then
+   		bullet.IgnoreEntity = previousTrace.Entity
+   	end
 
 	bullet.Callback = function ( att, tr, dmg )
 		self:Falloff( att, tr, dmg)
@@ -316,28 +327,47 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 		
 		self:OnDoorShot(tr.Entity, dir);
 
-		local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
+
+		local reflectVector =  dir-2*(dir:DotProduct(tr.HitNormal))*tr.HitNormal
+
 		local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
 
-		print(reflectAngles)
-
-		if(
-		math.abs(reflectAngles.x) > 70 or 
-		math.abs(reflectAngles.y) > 70 or 
-		math.abs(reflectAngles.z) > 70) then
-
-			self:Ricochet( att, tr, dmg, self.Primary.Penetration, reflectVector )
-		else
-			self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
-		end
-
-		if CLIENT and !tr.HitSky then
+		local newTrace = {}
+		newTrace.start = src
+		newTrace.last = tr.HitPos
+		table.insert(self.DrawTrace, newTrace)
+	
+		if CLIENT and !tr.HitSky 
+		then
 			if(tr.HitGroup == 1) then
 				self:BloodSplatter(tr)
 			elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
 				self:CreateSmoke(tr)
 			end
 		end
+
+		--[[ 
+	if
+			--tr.Entity != NULL and tr.Entity:IsFlagSet(FL_WORLDBRUSH) and
+			remainingRicochets > 0 and
+			(math.abs(reflectAngles.x) > 70 or 
+			math.abs(reflectAngles.y) > 70 or 
+			math.abs(reflectAngles.z) > 70)
+		then
+			if SERVER then
+				print("Shot Ricochet, remaining Ricochets = " .. remainingRicochets)
+			end
+			self:Ricochet( tr, remainingPenetration, remainingRicochets, reflectVector )
+		else
+			if SERVER then
+				print("Shot Penetrated, remaining Penetration = " .. remainingPenetration)
+			end
+			self:Penetrate( tr, remainingPenetration, remainingRicochets )
+		end
+		]]
+	
+
+		self:Penetrate( tr, remainingPenetration, remainingRicochets )
 	end
 
 	self.Owner:FireBullets( bullet )
@@ -345,51 +375,88 @@ function SWEP:ShootBullet( damage, num_bullets, aimcone, ammo_type, force, trace
 	self:ShootEffects()
 end
 
-function SWEP:GenerateExtraBullets(traceResults, numbul, src, dir, spread, tracer, force, damage, penetration)
-	local bullet = {}
-	bullet.Num    = numbul
-	bullet.Src    = trace.endpos-tr.Normal
-	bullet.Dir    = tr.Normal
-	bullet.Spread = Vector( cone, cone, 0 )
-	bullet.Tracer = 0
-	bullet.Force  = 10
-	bullet.Damage = self.Primary.Damage*(self.Primary.Penetration/penetration)
+function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
 
-	if tr.Entity:IsPlayer() or tr.Entity:IsNPC() then
-		bullet.IgnoreEntity = tr.Entity
+	if remainingPenetration <= 0.01 then return end
+
+	local leftSolid = false;
+	local traceResultLength = 1;
+
+	local trace	= {}
+	trace.mask	= MASK_SHOT
+	trace.start = tr.HitPos;
+	trace.endpos = tr.HitPos + tr.Normal;
+	
+	local traceResult;
+
+	--Determine the length of the trace in units
+	while traceResultLength < remainingPenetration and !leftSolid do
+		traceResult = util.TraceLine(trace)
+
+		if
+			(tr.Entity != NULL and traceResult.Entity != tr.Entity) or
+			(tr.Entity == NULL and !traceResult.HitWorld)
+		then
+			leftSolid = true
+		else
+			trace.start = trace.endpos
+			trace.endpos = trace.endpos+tr.Normal
+
+			traceResultLength = traceResultLength+1;
+		end
 	end
 
-	bullet.Callback = function ( att, tr, dmg ) 
-			if CLIENT and !tr.HitSky then
-				if(tr.HitGroup == 1) then
-					self:BloodSplatter(tr)
-				elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
-					self:CreateSmoke(tr)
-				end
-			end
+	remainingPenetration = (remainingPenetration-traceResultLength)
 
-			--self:Falloff( att, tr, dmg)
-			local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
-			local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
-
-			print(reflectAngles)
-
-			if(
-			math.abs(reflectAngles.x) > 70 or 
-			math.abs(reflectAngles.y) > 70 or 
-			math.abs(reflectAngles.z) > 70) then
-
-				self:Ricochet( att, tr, dmg, self.Primary.Penetration, reflectVector )
-			else
-				self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
-			end
+	if SERVER then
+		print("Left wall after " .. traceResultLength .. " units. Remaining Penetration = " .. remainingPenetration .. " units")
 	end
    
-   timer.Simple(0, function() att:FireBullets(bullet) end)
+   	if (remainingPenetration <= 0.01 or !leftSolid) then return end
+   
+	timer.Simple(0, function() 
+		self:ShootBullet(
+			1, 
+			trace.endpos,
+			tr.Normal,
+			cone, 
+			0,
+			self.Primary.Force, 
+			self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
+			self.Primary.Ammo, 
+			remainingPenetration,
+			remainingRicochets,
+			tr
+		)
+	end)
+end
+
+function SWEP:Ricochet(tr, remainingPenetration, remainingRicochets, reflectVector )
+   	timer.Simple(0, function() 
+		self:ShootBullet(
+			1, 
+			tr.HitPos,
+			reflectVector,
+			cone, 
+			0,
+			self.Primary.Force, 
+			self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
+			self.Primary.Ammo, 
+			remainingPenetration,
+			remainingRicochets-1
+		)
+	end)
 end
 
 function SWEP:OnDoorShot(door)
 	if door:GetClass() == "prop_door_rotating" and !door:GetInternalVariable("m_bLocked") and SERVER then
+
+		door:SetSaveValue("soundcloseoverride", "NULL")
+		door:SetSaveValue("soundopenoverride", "NULL")
+		door:SetSaveValue("soundmoveoverride", "NULL")
+		door:SetSaveValue("soundlockedoverride", "NULL")
+		door:SetSaveValue("soundunlockedoverride", "NULL")
+
 		local doorRagdoll = ents.Create("prop_physics")
 		doorRagdoll:SetModel(door:GetModel())
 		doorRagdoll:SetPos(door:GetPos())
@@ -402,9 +469,6 @@ function SWEP:OnDoorShot(door)
 		--Once its open, then delete it.
 		--WIP NEED FIX FOR DOUBLE DOORS
 		door:RemoveAllDecals();
-		door:SetSaveValue("soundcloseoverride", "NULL")
-		door:SetSaveValue("soundopenoverride", "NULL")
-		door:SetSaveValue("soundmoveoverride", "NULL")
 		door:Input("Open")
 		door:SetMaterial("NULL")
 		door:SetSolid(0);
@@ -416,7 +480,7 @@ function SWEP:OnDoorShot(door)
 			self:OnDoorShot(door:GetInternalVariable("m_hMaster"))
 		end
 
-		timer.Simple(1, function() door:Remove() end)
+		timer.Simple(0, function() door:Remove() end)
 		doorRagdoll:Spawn()
 	end
 end
@@ -466,90 +530,6 @@ function SWEP:Falloff( att, tr , dmg)
 			end
 		end
 	end
-end
-
-function SWEP:Penetrate( att, tr, dmg, penetration, dir)
-
-	if penetration <= 0.01 then return end
-
-	local src = {};
-	local leftSolid = false;
-
-	local traceResultLength = 1;
-	local trace	= {}
-	trace.mask	= MASK_SHOT
-	trace.start = tr.HitPos;
-	trace.endpos = tr.HitPos + tr.Normal;
-	
-	local traceResult;
-
-	--Determine the length of the trace in units
-	while traceResultLength < penetration and !leftSolid do
-
-		traceResult = util.TraceLine(trace)
-
-		if(
-			(tr.Entity != NULL and traceResult.Entity != tr.Entity) or
-			(tr.Entity == NULL and !traceResult.HitWorld)
-		) then
-			leftSolid = true
-		else
-			trace.start = trace.endpos
-			trace.endpos = trace.endpos+tr.Normal
-
-			traceResultLength = traceResultLength+1;
-		end
-	end
-
-   penetration = (penetration-traceResultLength)
-
-    if SERVER then
-	print("Left wall after " .. traceResultLength .. " units. Remaining Penetration = " .. penetration .. " units")
-   end
-   
-   if (penetration <= 0.01 or !leftSolid) then return end
-   
-   
-end
-
-function SWEP:Ricochet( att, tr, dmg, penetration, dir )
-   local bullet = {}
-   bullet.Num    = numbul
-   bullet.Src    = tr.HitPos
-   bullet.Dir    = dir
-   bullet.Spread = Vector( cone, cone, 0 )
-   bullet.Tracer = 0
-   bullet.Force  = 10
-   bullet.Damage = self.Primary.Damage
-
-   if tr.Entity:IsPlayer() or tr.Entity:IsNPC() then
-   	bullet.IgnoreEntity = tr.Entity
-   end
-
-   bullet.Callback = function ( att, tr, dmg ) 
-	if CLIENT and !tr.HitSky then
-		if(tr.HitGroup == 1) then
-			self:BloodSplatter(tr)
-		elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
-			self:CreateSmoke(tr)
-		end
-	end
-
-      	--self:Falloff( att, tr, dmg)
-      	local reflectVector =  dir-2*(dir*tr.HitNormal)*tr.HitNormal
-		local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
-
-		if(
-		math.abs(reflectAngles.x) > 70 or 
-		math.abs(reflectAngles.y) > 70 or 
-		math.abs(reflectAngles.z) > 70) then
-
-			self:Ricochet( att, tr, dmg, self.Primary.Penetration, reflectVector )
-		else
-			self:Penetrate( att, tr, dmg, self.Primary.Penetration, dir:GetNormal() )
-		end
-   
-   timer.Simple(0, function() att:FireBullets(bullet) end)
 end
 
 function SWEP:ADS()
@@ -649,10 +629,6 @@ function SWEP:SetupDataTables()
 
 	self:NetworkVar( "Float", 1, "CurrRecoil")
 end
-
-SWEP.CurrIronSightPos = Vector(0,0,0);
-SWEP.CurrEyeRot = 0;
-SWEP.isIronsights = false;
 
 function SWEP:GetViewModelPosition(EyePos, EyeAng)
 	if CLIENT then

@@ -36,9 +36,9 @@ SWEP.SprayIndex 			= 1;
 SWEP.SprayReductionSpeed 	= 0.5;
 SWEP.DebugDamage 			= 0;
 SWEP.DebugShotDistance 		= 0;
-SWEP.CurrIronSightPos = Vector(0,0,0);
-SWEP.CurrEyeRot = 0;
-SWEP.isIronsights = false;
+SWEP.CurrIronSightPos 		= Vector(0,0,0);
+SWEP.CurrEyeRot 			= 0;
+SWEP.isIronsights 			= false;
 
 SWEP.Primary.Delay         	= .1
 SWEP.Primary.LRecoil        = 1
@@ -58,7 +58,7 @@ SWEP.Primary.FalloffMax		= 2000
 SWEP.Primary.Falloffscale	= .8
 SWEP.Primary.Ricochets		= 1
 SWEP.Primary.Penetration    = 100
-SWEP.Primary.NumBullets		= 5
+SWEP.Primary.NumBullets		= 1
 SWEP.Primary.Force			= 10
 SWEP.Primary.Tracer			= 1
 
@@ -327,7 +327,6 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		
 		self:OnDoorShot(tr.Entity, dir);
 
-
 		local reflectVector =  dir-2*(dir:DotProduct(tr.HitNormal))*tr.HitNormal
 
 		local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
@@ -366,8 +365,9 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		end
 		]]
 	
-
-		self:Penetrate( tr, remainingPenetration, remainingRicochets )
+		if tr.Entity != NULL and tr.DispFlags == 0 then
+			self:Penetrate( tr, remainingPenetration, remainingRicochets )
+		end
 	end
 
 	self.Owner:FireBullets( bullet )
@@ -384,10 +384,12 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
 
 	local trace	= {}
 	trace.mask	= MASK_SHOT
-	trace.start = tr.HitPos;
-	trace.endpos = tr.HitPos + tr.Normal;
+	trace.start = tr.HitPos + tr.Normal;
+	trace.endpos = trace.start  + tr.Normal;
 	
 	local traceResult;
+
+	
 
 	--Determine the length of the trace in units
 	while traceResultLength < remainingPenetration and !leftSolid do

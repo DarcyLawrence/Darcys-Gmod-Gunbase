@@ -56,7 +56,7 @@ SWEP.Primary.Sound         	= Sound( "Weapon_M4A1.Single" )
 SWEP.Primary.FalloffMin		= 1000
 SWEP.Primary.FalloffMax		= 2000
 SWEP.Primary.Falloffscale	= .8
-SWEP.Primary.Ricochets		= 1
+SWEP.Primary.Ricochets		= 5
 SWEP.Primary.Penetration    = 100
 SWEP.Primary.NumBullets		= 1
 SWEP.Primary.Force			= 10
@@ -248,7 +248,7 @@ function SWEP:Think()
 		surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
 	end )
 
-	--[[if SERVER then
+	if SERVER then
 			hook.Add("PostDrawViewModel", "drawTraces", function()
 			for k, v in ipairs(self.DrawTrace) do
 				render.DrawLine( 
@@ -258,7 +258,7 @@ function SWEP:Think()
 					false )
 			end
 		end)
-	end]]
+	end
 end
 
 function SWEP:PrimaryAttack()
@@ -286,7 +286,8 @@ function SWEP:PrimaryAttack()
 			self.Primary.Damage, 
 			self.Primary.Ammo, 
 			self.Primary.Penetration,
-			self.Primary.Ricochets
+			self.Primary.Ricochets,
+			dir
 		)
 
 		self.Weapon:EmitSound(self.Primary.Sound)
@@ -302,7 +303,7 @@ function SWEP:PrimaryAttack()
 end
 
 function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
-	force, damage, ammo_type, remainingPenetration, remainingRicochets, previousTrace)
+	force, damage, ammo_type, remainingPenetration, remainingRicochets, shotStartAngle)
 
 	local bullet = {}
 	bullet.Num		= numBullets
@@ -327,9 +328,11 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		
 		self:OnDoorShot(tr.Entity, dir);
 
-		local reflectVector =  dir-2*(dir:DotProduct(tr.HitNormal))*tr.HitNormal
-
-		local reflectAngles = tr.HitNormal:Angle() - reflectVector:Angle();
+		--Calculate  the angle difference between shot direction and shot hit position
+		local vectorAngleDiff = dir:Dot(tr.HitNormal);
+		vectorAngleDiff = vectorAngleDiff / (dir:Length()*tr.HitNormal:Length())
+		vectorAngleDiff = math.deg(math.acos(vectorAngleDiff))
+		print(vectorAngleDiff)
 
 		local newTrace = {}
 		newTrace.start = src
@@ -341,33 +344,37 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 			if(tr.HitGroup == 1) then
 				self:BloodSplatter(tr)
 			elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
-				self:CreateSmoke(tr)
+				timer.Simple(0, function() 
+					self:CreateSmoke(tr)
+				end)
 			end
 		end
 
-		--[[ 
+		
 	if
 			--tr.Entity != NULL and tr.Entity:IsFlagSet(FL_WORLDBRUSH) and
-			remainingRicochets > 0 and
-			(math.abs(reflectAngles.x) > 70 or 
-			math.abs(reflectAngles.y) > 70 or 
-			math.abs(reflectAngles.z) > 70)
+			vectorAngleDiff < 110 and
+			remainingRicochets > 0 
 		then
 			if SERVER then
 				print("Shot Ricochet, remaining Ricochets = " .. remainingRicochets)
 			end
-			self:Ricochet( tr, remainingPenetration, remainingRicochets, reflectVector )
+
+			--Determine the directon of a reflectedShot
+			local reflectVector =  dir-2*(dir:Dot(tr.HitNormal))*tr.HitNormal
+
+			self:Ricochet( tr, remainingPenetration, remainingRicochets, shotStartAngle, reflectVector )
 		else
 			if SERVER then
 				print("Shot Penetrated, remaining Penetration = " .. remainingPenetration)
 			end
-			self:Penetrate( tr, remainingPenetration, remainingRicochets )
+			self:Penetrate( tr, remainingPenetration, remainingRicochets, shotStartAngle )
 		end
-		]]
+		
 	
-		if tr.Entity != NULL and tr.DispFlags == 0 then
+		--[[if tr.Entity != NULL and tr.DispFlags == 0 then
 			self:Penetrate( tr, remainingPenetration, remainingRicochets )
-		end
+		end]]
 	end
 
 	self.Owner:FireBullets( bullet )
@@ -375,7 +382,7 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 	self:ShootEffects()
 end
 
-function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
+function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets, shotStartAngle)
 
 	if remainingPenetration <= 0.01 then return end
 
@@ -384,12 +391,10 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
 
 	local trace	= {}
 	trace.mask	= MASK_SHOT
-	trace.start = tr.HitPos + tr.Normal;
-	trace.endpos = trace.start  + tr.Normal;
+	trace.start = tr.HitPos + shotStartAngle:GetNormalized();
+	trace.endpos = trace.start  + shotStartAngle:GetNormalized();
 	
 	local traceResult;
-
-	
 
 	--Determine the length of the trace in units
 	while traceResultLength < remainingPenetration and !leftSolid do
@@ -402,7 +407,7 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
 			leftSolid = true
 		else
 			trace.start = trace.endpos
-			trace.endpos = trace.endpos+tr.Normal
+			trace.endpos = trace.endpos+shotStartAngle:GetNormalized()
 
 			traceResultLength = traceResultLength+1;
 		end
@@ -415,12 +420,17 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
 	end
    
    	if (remainingPenetration <= 0.01 or !leftSolid) then return end
+
+	if CLIENT and !tr.HitSky 
+	then
+		self:CreateSmoke(traceResult)
+	end
    
 	timer.Simple(0, function() 
 		self:ShootBullet(
 			1, 
 			trace.endpos,
-			tr.Normal,
+			shotStartAngle:GetNormalized(),
 			cone, 
 			0,
 			self.Primary.Force, 
@@ -428,12 +438,12 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets)
 			self.Primary.Ammo, 
 			remainingPenetration,
 			remainingRicochets,
-			tr
+			shotStartAngle
 		)
 	end)
 end
 
-function SWEP:Ricochet(tr, remainingPenetration, remainingRicochets, reflectVector )
+function SWEP:Ricochet(tr, remainingPenetration, remainingRicochets, shotStartAngle, reflectVector )
    	timer.Simple(0, function() 
 		self:ShootBullet(
 			1, 
@@ -445,7 +455,8 @@ function SWEP:Ricochet(tr, remainingPenetration, remainingRicochets, reflectVect
 			self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
 			self.Primary.Ammo, 
 			remainingPenetration,
-			remainingRicochets-1
+			remainingRicochets-1,
+			shotStartAngle
 		)
 	end)
 end

@@ -306,19 +306,19 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		table.insert(self.DrawTrace, newTrace)
 	
 		
-		if SERVER then
-			--if(tr.HitGroup == 1) then
+		if SERVER and !tr.HitSky then
+			if(tr.HitGroup == 1) then
 				--self:BloodSplatter(tr)
-			--elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
-
-			local smokeEffect = ents.Create("spawner_smoke")
-			--smokeEffect.Direction = tr.HitNormal
-			smokeEffect:SetPos(tr.HitPos+tr.HitNormal)
-			smokeEffect:SetAngles(tr.HitNormal:Angle())
-			smokeEffect:SetMaterial("NULL")
-			smokeEffect:SetSolid(0);
-			smokeEffect:DrawShadow(false)
-			smokeEffect:Spawn()
+			elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
+				local smokeEffect = ents.Create("spawner_smoke")
+				--smokeEffect.Direction = tr.HitNormal
+				smokeEffect:SetPos(tr.HitPos+tr.HitNormal)
+				smokeEffect:SetAngles(tr.HitNormal:Angle())
+				smokeEffect:SetMaterial("NULL")
+				smokeEffect:SetSolid(0);
+				smokeEffect:DrawShadow(false)
+				smokeEffect:Spawn()
+			end
 		end
 
 	if

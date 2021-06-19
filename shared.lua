@@ -116,42 +116,7 @@ if CLIENT then
 		outline = false,
 	})
 
-	function SWEP:CreateSmoke(tr)
-		local em = ParticleEmitter(tr.HitPos)
-	
-		--local r = self:GetRadius()
 
-		   --local prpos = VectorRand() * r
-		   --prpos.z = prpos.z + 32
-		   local p = em:Add(smokeparticle, tr.HitPos)
-		   if p then
-			  local gray = math.random(200, 255)
-			  p:SetColor(gray, gray, gray)
-			  p:SetStartAlpha(200)
-			  p:SetEndAlpha(0)
-			  p:SetVelocity(tr.HitNormal * math.Rand(200, 300))
-			  p:SetLifeTime(0)
-			  p:SetAirResistance(100)
-
-			  p:SetGravity(Vector(0,0,150))
-			  
-			  p:SetDieTime(math.Rand(5, 7))
-	
-			  p:SetStartSize(math.random(5, 10))
-			  p:SetEndSize(math.random(50, 60))
-			  p:SetRoll(math.random(-180, 180))
-			  p:SetRollDelta(math.Rand(-0.1, 0.1))
-			  p:SetAirResistance(600)
-	
-			  p:SetCollide(true)
-			  p:SetBounce(0.4)
-	
-			  p:SetLighting(false)
-		   end
-
-	
-		em:Finish()
-	end
 
 	function SWEP:BloodSplatter(tr)
 		local em = ParticleEmitter(tr.HitPos)
@@ -296,6 +261,7 @@ function SWEP:PrimaryAttack()
 		self:Recoil();
 		self:UpdateSprayIndex(1)
 
+
 		if CLIENT then
 			--self:GunSmoke(self.Owner:GetPos()+Vector(0,0,60))
 		end
@@ -339,18 +305,22 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		newTrace.last = tr.HitPos
 		table.insert(self.DrawTrace, newTrace)
 	
-		if CLIENT and !tr.HitSky 
-		then
-			if(tr.HitGroup == 1) then
-				self:BloodSplatter(tr)
-			elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
-				timer.Simple(0, function() 
-					self:CreateSmoke(tr)
-				end)
-			end
+		
+		if SERVER then
+			--if(tr.HitGroup == 1) then
+				--self:BloodSplatter(tr)
+			--elseif !tr.Entity:IsPlayer() and !tr.Entity:IsNPC() then
+
+			local smokeEffect = ents.Create("spawner_smoke")
+			--smokeEffect.Direction = tr.HitNormal
+			smokeEffect:SetPos(tr.HitPos+tr.HitNormal)
+			smokeEffect:SetAngles(tr.HitNormal:Angle())
+			smokeEffect:SetMaterial("NULL")
+			smokeEffect:SetSolid(0);
+			smokeEffect:DrawShadow(false)
+			smokeEffect:Spawn()
 		end
 
-		
 	if
 			--tr.Entity != NULL and tr.Entity:IsFlagSet(FL_WORLDBRUSH) and
 			vectorAngleDiff < 110 and
@@ -420,11 +390,6 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets, shotStartA
 	end
    
    	if (remainingPenetration <= 0.01 or !leftSolid) then return end
-
-	if CLIENT and !tr.HitSky 
-	then
-		self:CreateSmoke(traceResult)
-	end
    
 	timer.Simple(0, function() 
 		self:ShootBullet(

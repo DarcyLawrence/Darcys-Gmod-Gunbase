@@ -63,10 +63,16 @@ SWEP.Primary.Force			= 10
 SWEP.Primary.Tracer			= 1
 
 SWEP.Secondary.Automatic	= false
+SWEP.Secondary.ClipSize = -1
+SWEP.Secondary.DefaultClip = -1
+SWEP.Secondary.Ammo = "none"
 
 currMov = 1;
 
 SWEP.DrawTrace = {};
+SWEP.LerpRatio = 1;
+SWEP.CurrViewPunch = Angle(0,0,0)
+SWEP.ViewPunchResetTime = 0
 
 SWEP.Spray = {
 	[1] = {0, .5},
@@ -115,8 +121,6 @@ if CLIENT then
 		additive = false,
 		outline = false,
 	})
-
-
 
 	function SWEP:BloodSplatter(tr)
 		local em = ParticleEmitter(tr.HitPos)
@@ -204,13 +208,13 @@ function SWEP:Think()
 		surface.SetFont( "DebugFont" )
 		surface.SetTextColor( 255, 255, 255 )
 		surface.SetTextPos( 128, 128 ) 
-		surface.DrawText( "Spray Index: " .. math.Round(self.SprayIndex))
+		--surface.DrawText( "Spray Index: " .. math.Round(self.SprayIndex))
 
 		surface.SetTextPos( 128, 96 ) 
-		surface.DrawText( "Last Shot Damage: " .. self.DebugDamage)
+		--surface.DrawText( "Last Shot Damage: " .. self.DebugDamage)
 
 		surface.SetTextPos( 128, 64 ) 
-		surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
+		--surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
 	end )
 
 	if SERVER then
@@ -224,6 +228,20 @@ function SWEP:Think()
 			end
 		end)
 	end
+
+	
+	local owner = self:GetOwner()
+
+	self.LerpRatio = Lerp(self.LerpRatio*1.5, 0, 1)
+	self.CurrViewPunch = LerpAngle(self.LerpRatio, self.CurrViewPunch, Angle(0,0,0))
+
+	if(self.ViewPunchResetTime > CurTime()) then
+		owner:SetViewPunchVelocity(self.CurrViewPunch)
+	end
+
+
+
+	
 end
 
 function SWEP:PrimaryAttack()
@@ -265,6 +283,8 @@ function SWEP:PrimaryAttack()
 		if CLIENT then
 			--self:GunSmoke(self.Owner:GetPos()+Vector(0,0,60))
 		end
+	else
+		self:Reload();
 	end
 end
 
@@ -322,24 +342,24 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		end
 
 	if
-			--tr.Entity != NULL and tr.Entity:IsFlagSet(FL_WORLDBRUSH) and
-			vectorAngleDiff < 110 and
-			remainingRicochets > 0 
-		then
-			if SERVER then
-				print("Shot Ricochet, remaining Ricochets = " .. remainingRicochets)
-			end
-
-			--Determine the directon of a reflectedShot
-			local reflectVector =  dir-2*(dir:Dot(tr.HitNormal))*tr.HitNormal
-
-			self:Ricochet( tr, remainingPenetration, remainingRicochets, shotStartAngle, reflectVector )
-		else
-			if SERVER then
-				print("Shot Penetrated, remaining Penetration = " .. remainingPenetration)
-			end
-			self:Penetrate( tr, remainingPenetration, remainingRicochets, shotStartAngle )
+		--tr.Entity != NULL and tr.Entity:IsFlagSet(FL_WORLDBRUSH) and
+		vectorAngleDiff < 110 and
+		remainingRicochets > 0 
+	then
+		if SERVER then
+			print("Shot Ricochet, remaining Ricochets = " .. remainingRicochets)
 		end
+
+		--Determine the directon of a reflectedShot
+		local reflectVector =  dir-2*(dir:Dot(tr.HitNormal))*tr.HitNormal
+
+		self:Ricochet( tr, remainingPenetration, remainingRicochets, shotStartAngle, reflectVector )
+	else
+		if SERVER then
+			print("Shot Penetrated, remaining Penetration = " .. remainingPenetration)
+		end
+		self:Penetrate( tr, remainingPenetration, remainingRicochets, shotStartAngle )
+	end
 		
 	
 		--[[if tr.Entity != NULL and tr.DispFlags == 0 then
@@ -436,18 +456,21 @@ function SWEP:OnDoorShot(door)
 		door:SetSaveValue("soundunlockedoverride", "NULL")
 
 		local doorRagdoll = ents.Create("prop_physics")
+		doorRagdoll:DrawShadow(false)
 		doorRagdoll:SetModel(door:GetModel())
 		doorRagdoll:SetPos(door:GetPos())
 		doorRagdoll:SetAngles(door:GetAngles())
 		doorRagdoll:SetSkin(door:GetSkin())
+		doorRagdoll:DrawShadow(true)
 
-		PrintTable(door:GetSaveTable());
+		--PrintTable(door:GetSaveTable());
 		--This is a hack job to handle some doors that control VIS in an area.
 		--Basically hide everything about the door, disable collision and open it.
 		--Once its open, then delete it.
 		--WIP NEED FIX FOR DOUBLE DOORS
 		door:RemoveAllDecals();
-		door:Input("Open")
+		--door:Input("Open")
+		door:DrawShadow(false);
 		door:SetMaterial("NULL")
 		door:SetSolid(0);
 		
@@ -475,11 +498,14 @@ function SWEP:Recoil()
 	eyeAngle.p = eyeAngle.p + vRecoil;
 	eyeAngle.y = eyeAngle.y - hRecoil;
 	
-	local recoilAngle = Angle(vRecoil, hRecoil, 0)
+	self.CurrViewPunch = self.CurrViewPunch + Angle(vRecoil, hRecoil, 0)
+
+	self.LerpRatio = 0.01;
+	self.ViewPunchResetTime = CurTime() + 0.225
 	
 	--owner:SetEyeAngles(eyeAngle)
 	--owner:SetViewPunchVelocity(recoilAngle)
-	owner:ViewPunch(recoilAngle)
+	owner:SetViewPunchVelocity(self.CurrViewPunch)
 
 	self:AdjustRecoil(0.4)
 end

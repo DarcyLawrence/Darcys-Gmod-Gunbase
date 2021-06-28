@@ -10,6 +10,8 @@ if CLIENT then
    SWEP.ViewModelFOV       	= 72
    
    SWEP.DrawCrosshair		= true;
+   SWEP.SwayScale				= 0
+   SWEP.BobScale 				= 0
 end
 
 SWEP.Base                  	= "weapon_base"
@@ -17,8 +19,8 @@ SWEP.Kind                  	= WEAPON_HEAVY
 SWEP.WeaponID              	= AMMO_M16
 SWEP.IronSightsPos 			= Vector( -3.680, -12.2687, 6.88 )
 SWEP.IronSightsAng 			= Vector( -4.8723, -2.10, -2.5 )
-SWEP.BobScale 				= 0.1
-SWEP.SwayScale				= 0
+
+
 SWEP.RecoilReductionSpeed 	= .05
 SWEP.AutoSpawnable         	= true
 SWEP.Spawnable             	= true
@@ -70,17 +72,21 @@ SWEP.Secondary.Ammo = "none"
 currMov = 1;
 
 SWEP.DrawTrace = {};
+
+--Weapon Handling Vars
 SWEP.LerpRatio = 1;
+SWEP.LerpAccel = 1.75;
 SWEP.CurrViewPunch = Angle(0,0,0)
 SWEP.ViewPunchResetTime = 0
+SWEP.ViewPunchResetDelay = 0.125
 
 SWEP.Spray = {
-	[1] = {0, .5},
-	[2] = {.50, .5},
-	[3] = {.50, 1},
-	[4] = {0.25, 1},
-	[5] = {0, 1.5},
-	[6] = {.50, 2},
+	[1] = {0, 8},
+	[2] = {2, 10},
+	[3] = {5, 15},
+	[4] = {10, 8},
+	[5] = {0, 5},
+	[6] = {.50, 4},
 	[7] = {0, 2.25},
 	[8] = {0, 2.5},
 	[9] = {.25, 2.5},
@@ -232,7 +238,7 @@ function SWEP:Think()
 	
 	local owner = self:GetOwner()
 
-	self.LerpRatio = Lerp(self.LerpRatio*1.5, 0, 1)
+	self.LerpRatio = Lerp(self.LerpRatio*self.LerpAccel, 0, 1)
 	self.CurrViewPunch = LerpAngle(self.LerpRatio, self.CurrViewPunch, Angle(0,0,0))
 
 	if(self.ViewPunchResetTime > CurTime()) then
@@ -347,7 +353,7 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		remainingRicochets > 0 
 	then
 		if SERVER then
-			print("Shot Ricochet, remaining Ricochets = " .. remainingRicochets)
+			--print("Shot Ricochet, remaining Ricochets = " .. remainingRicochets)
 		end
 
 		--Determine the directon of a reflectedShot
@@ -356,7 +362,7 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 		self:Ricochet( tr, remainingPenetration, remainingRicochets, shotStartAngle, reflectVector )
 	else
 		if SERVER then
-			print("Shot Penetrated, remaining Penetration = " .. remainingPenetration)
+			--print("Shot Penetrated, remaining Penetration = " .. remainingPenetration)
 		end
 		self:Penetrate( tr, remainingPenetration, remainingRicochets, shotStartAngle )
 	end
@@ -406,7 +412,7 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets, shotStartA
 	remainingPenetration = (remainingPenetration-traceResultLength)
 
 	if SERVER then
-		print("Left wall after " .. traceResultLength .. " units. Remaining Penetration = " .. remainingPenetration .. " units")
+		--print("Left wall after " .. traceResultLength .. " units. Remaining Penetration = " .. remainingPenetration .. " units")
 	end
    
    	if (remainingPenetration <= 0.01 or !leftSolid) then return end
@@ -501,7 +507,7 @@ function SWEP:Recoil()
 	self.CurrViewPunch = self.CurrViewPunch + Angle(vRecoil, hRecoil, 0)
 
 	self.LerpRatio = 0.01;
-	self.ViewPunchResetTime = CurTime() + 0.225
+	self.ViewPunchResetTime = CurTime() + self.ViewPunchResetDelay
 	
 	--owner:SetEyeAngles(eyeAngle)
 	--owner:SetViewPunchVelocity(recoilAngle)

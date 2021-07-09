@@ -3,13 +3,14 @@ AddCSLuaFile()
 SWEP.HoldType              	= "physgun"
 
 if CLIENT then
-   SWEP.PrintName          	= "JL_Base"
+   SWEP.PrintName          	= "Soviet Carbine"
    SWEP.Slot               	= 2
 
    SWEP.ViewModelFlip      	= false
    SWEP.ViewModelFOV       	= 72
    
    SWEP.DrawCrosshair		= true;
+   SWEP.DrawAmmo			= false
    SWEP.SwayScale				= 0
    SWEP.BobScale 				= 0
 end
@@ -17,9 +18,11 @@ end
 SWEP.Base                  	= "weapon_base"
 SWEP.Kind                  	= WEAPON_HEAVY
 SWEP.WeaponID              	= AMMO_M16
-SWEP.IronSightsPos 			= Vector( -3.680, -12.2687, 6.88 )
-SWEP.IronSightsAng 			= Vector( -4.8723, -2.10, -2.5 )
+--SWEP.IronSightsPos 			= Vector( -3.680, -12.2687, 6.88 )
+--SWEP.IronSightsAng 			= Vector( -4.8723, -2.10, -2.5 )
 
+SWEP.IronSightsPos 			= Vector(0,0,0 )
+SWEP.IronSightsAng 			= Vector( 0,0,0)
 
 SWEP.RecoilReductionSpeed 	= .05
 SWEP.AutoSpawnable         	= true
@@ -42,6 +45,8 @@ SWEP.CurrIronSightPos 		= Vector(0,0,0);
 SWEP.CurrEyeRot 			= 0;
 SWEP.isIronsights 			= false;
 
+SWEP.Debug 					= true;
+
 SWEP.Primary.Delay         	= .1
 SWEP.Primary.LRecoil        = 1
 SWEP.Primary.RRecoil        = 1
@@ -51,9 +56,9 @@ SWEP.Primary.Automatic     	= true
 SWEP.Primary.Ammo          	= "Pistol"
 SWEP.Primary.Damage        	= 23
 SWEP.Primary.Cone          	= 0.1
-SWEP.Primary.ClipSize      	= 20
-SWEP.Primary.ClipMax      	= 60
-SWEP.Primary.DefaultClip   	= 20
+SWEP.Primary.ClipSize      	= 30
+SWEP.Primary.ClipMax      	= 999999
+SWEP.Primary.DefaultClip   	= 999999
 SWEP.Primary.Sound         	= Sound( "Weapon_M4A1.Single" )
 SWEP.Primary.FalloffMin		= 1000
 SWEP.Primary.FalloffMax		= 2000
@@ -75,49 +80,175 @@ SWEP.DrawTrace = {};
 
 --Weapon Handling Vars
 SWEP.LerpRatio = 1;
-SWEP.LerpAccel = 1.75;
+SWEP.LerpAccel = 1.1;
 SWEP.CurrViewPunch = Angle(0,0,0)
 SWEP.ViewPunchResetTime = 0
 SWEP.ViewPunchResetDelay = 0.125
+
+SWEP.HideName = false;
 
 SWEP.Spray = {
 	[1] = {0, 8},
 	[2] = {2, 10},
 	[3] = {5, 15},
 	[4] = {10, 8},
-	[5] = {0, 5},
-	[6] = {.50, 4},
-	[7] = {0, 2.25},
-	[8] = {0, 2.5},
-	[9] = {.25, 2.5},
-	[10] = {.5, 2.5},
-	[11] = {.75, 2.75},
-	[12] = {.25, 2.9},
-	[13] = {-.5, 3.1},
-	[14] = {-.5, 3.2},
-	[15] = {-1, 3.3},
-	[16] = {0, 3.4},
-	[17] = {0, 3.45},
-	[18] = {0, 3.5},
-	[19] = {0, 3.55},
-	[20] = {0, 3.6}
+	[5] = {5, 8},
+	[6] = {-5, 5},
+	[7] = {-10, 10},
+	[8] = {-12, 2.5},
+	[9] = {-5, 5},
+	[10] = {5, 1},
+	[11] = {8, 0.5},
+	[12] = {10, 1},
+	[13] = {5, 1},
+	[14] = {5, 1},
+	[15] = {-1, 1},
+	[16] = {-8, 1.5},
+	[17] = {-10, 1},
+	[18] = {-10, 1},
+	[19] = {-8, 1},
+	[20] = {-6,1}
 }
 
 function SWEP:Initialize()
 	self:SetHoldType("ar2")
+end
+
+function SWEP:DrawCustomHUD()
+	hook.Add( "HUDPaint", "drawammo", function() 
+		if CLIENT then
+			local ammoCount = "";
+			local missingAmmo = "";
+			local boxWidth = 0;
+			local boxHeight = 60;
+			local ammoTotalWidth = 22;
+
+			for i=1, self:Clip1() do
+				ammoCount = ammoCount .. "|"
+			end
+
+			for i=1, self:GetMaxClip1()-self:Clip1() do
+				missingAmmo = missingAmmo .. "|"
+			end
+
+			surface.SetFont("DebugFont");
+			local spareAmmoWidth = surface.GetTextSize(self:GetOwner():GetAmmoCount(self:GetPrimaryAmmoType()))
+			local nameWidth = surface.GetTextSize(self.PrintName)
+
+			ammoTotalWidth = ammoTotalWidth + surface.GetTextSize(self:GetOwner():GetAmmoCount(self:GetPrimaryAmmoType()))
+
+			surface.SetFont("Ammo");
+			local currAmmoWidth =  surface.GetTextSize(ammoCount) 
+			local missingAmmoWidth=  surface.GetTextSize(missingAmmo) 
+
+			ammoTotalWidth = ammoTotalWidth + surface.GetTextSize(ammoCount);
+			ammoTotalWidth = ammoTotalWidth + surface.GetTextSize(missingAmmo);
+
+			surface.SetFont("DebugFont");
+
+			if nameWidth > boxWidth  then
+				boxWidth = surface.GetTextSize(self.PrintName)+20
+			end
+			if ammoTotalWidth > boxWidth or self.HideName then
+				boxWidth = ammoTotalWidth
+			end
+
+			if(!self.HideName) then
+				boxHeight= 124
+			end 
+
+			draw.RoundedBox( 
+					8, 
+					ScrW()-boxWidth-24, 
+					ScrH()-boxHeight-8, 
+					boxWidth, 
+					boxHeight,
+					Color(0,0,0,160) )
+
+			if(!self.HideName) then
+				draw.DrawText( self.PrintName,
+				"DebugFont",
+				ScrW()-32,
+				ScrH()-124,
+				Color(255,255,255,255),
+				TEXT_ALIGN_RIGHT)
+
+				surface.SetDrawColor( 255, 255, 255, 255 )
+				surface.DrawRect(ScrW()-boxWidth-12, ScrH()-70, boxWidth-24, 2 )
+			end
+
+			draw.DrawText(self:GetOwner():GetAmmoCount(self:GetPrimaryAmmoType()),
+			"DebugFont",
+			ScrW()-32,
+			ScrH()-60,
+			Color(255,255,255,255),
+			TEXT_ALIGN_RIGHT)
+
+			surface.SetFont("DebugFont");
+			
+			draw.DrawText(ammoCount,
+			"Ammo",
+			ScrW()-spareAmmoWidth-36,
+			ScrH()-64,
+			Color(255,255,255,255),
+			TEXT_ALIGN_RIGHT)
+
+			surface.SetFont("Ammo");
+
+			draw.DrawText(missingAmmo,
+			"Ammo",
+			ScrW()-spareAmmoWidth-currAmmoWidth-36,
+			ScrH()-64,
+			Color(0,0,0,230),
+			TEXT_ALIGN_RIGHT)
+		end
+	end)
+end
+		
+function SWEP:Deploy()
+	self:DrawCustomHUD()
+	self.init = true;
+
+	self.HideName = false
+	timer.Create( "hideName", 1.8, 0, function() self.HideName = true end )
+	
+	return true;
+end
+
+function SWEP:Holster()
+	hook.Remove( "HUDPaint", "drawammo" )
+	return true;
 end
 	
 if CLIENT then
 	local smokeparticle = Model("particle/particle_smokegrenade");
 
 	surface.CreateFont("DebugFont", {
-		font = "Arial", --  Use the font-name which is shown to you by your operating system Font Viewer, not the file name
+		font = "Century Gothic", --  Use the font-name which is shown to you by your operating system Font Viewer, not the file name
 		extended = false,
-		size = 32,
+		size = 48,
+		weight = 400,
+		blursize = 0,
+		scanlines = 0,
+		antialias = true,
+		underline = false,
+		italic = false,
+		strikeout = false,
+		symbol = false,
+		rotary = false,
+		shadow = false,
+		additive = false,
+		outline = false,
+	})
+
+	surface.CreateFont("Ammo", {
+		font = "Corbel", --  Use the font-name which is shown to you by your operating system Font Viewer, not the file name
+		extended = false,
+		size = 48,
 		weight = 700,
 		blursize = 0,
 		scanlines = 0,
-		antialias = false,
+		antialias = true,
 		underline = false,
 		italic = false,
 		strikeout = false,
@@ -159,6 +290,31 @@ if CLIENT then
 		   end
 		end
 		  
+		em:Finish()
+	end
+
+	function SWEP:ParticleTrace(tr)
+
+		local em = ParticleEmitter(tr.StartPos)
+		local currentPos = tr.StartPos
+
+		while currentPos:Distance(tr.StartPos) < tr.HitPos:Distance(tr.StartPos) do
+			local p = em:Add(smokeparticle, currentPos)
+			if p then
+				p:SetColor(255, 0, 0)
+				p:SetStartAlpha(255)
+				p:SetEndAlpha(255)
+				p:SetDieTime(7)
+				p:SetStartSize(0.8)
+				p:SetEndSize(0.8)
+
+				p:SetLighting(false)
+			end
+
+			currentPos = currentPos + tr.Normal
+		end
+
+	
 		em:Finish()
 	end
 
@@ -209,19 +365,12 @@ function SWEP:Think()
 	if CurTime() > self:GetNextPrimaryFire() + self.Primary.Delay then
 		self:UpdateSprayIndex(-self.SprayReductionSpeed)
 	end
+	self.HideName = self.HideName
 
-	hook.Add( "HUDPaint", "drawsometext", function()
-		surface.SetFont( "DebugFont" )
-		surface.SetTextColor( 255, 255, 255 )
-		surface.SetTextPos( 128, 128 ) 
-		--surface.DrawText( "Spray Index: " .. math.Round(self.SprayIndex))
-
-		surface.SetTextPos( 128, 96 ) 
-		--surface.DrawText( "Last Shot Damage: " .. self.DebugDamage)
-
-		surface.SetTextPos( 128, 64 ) 
-		--surface.DrawText( "Last Shot Distance: " .. self.DebugShotDistance)
-	end )
+	if (not self.init) then
+		self:DrawCustomHUD()
+	end
+		
 
 	if SERVER then
 			hook.Add("PostDrawViewModel", "drawTraces", function()
@@ -244,10 +393,6 @@ function SWEP:Think()
 	if(self.ViewPunchResetTime > CurTime()) then
 		owner:SetViewPunchVelocity(self.CurrViewPunch)
 	end
-
-
-
-	
 end
 
 function SWEP:PrimaryAttack()
@@ -347,6 +492,10 @@ function SWEP:ShootBullet( numBullets, src, dir, aimcone, tracer,
 			end
 		end
 
+		if CLIENT then
+			--self:ParticleTrace(tr)
+		end
+
 	if
 		--tr.Entity != NULL and tr.Entity:IsFlagSet(FL_WORLDBRUSH) and
 		vectorAngleDiff < 110 and
@@ -384,11 +533,12 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets, shotStartA
 
 	local leftSolid = false;
 	local traceResultLength = 1;
+	local shotStartNormal =  shotStartAngle:GetNormalized();
 
 	local trace	= {}
 	trace.mask	= MASK_SHOT
-	trace.start = tr.HitPos + shotStartAngle:GetNormalized();
-	trace.endpos = trace.start  + shotStartAngle:GetNormalized();
+	trace.start = tr.HitPos + shotStartNormal;
+	trace.endpos = trace.start  + shotStartNormal;
 	
 	local traceResult;
 
@@ -403,7 +553,7 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets, shotStartA
 			leftSolid = true
 		else
 			trace.start = trace.endpos
-			trace.endpos = trace.endpos+shotStartAngle:GetNormalized()
+			trace.endpos = trace.endpos+shotStartNormal
 
 			traceResultLength = traceResultLength+1;
 		end
@@ -417,39 +567,33 @@ function SWEP:Penetrate(tr, remainingPenetration, remainingRicochets, shotStartA
    
    	if (remainingPenetration <= 0.01 or !leftSolid) then return end
    
-	timer.Simple(0, function() 
-		self:ShootBullet(
-			1, 
-			trace.endpos,
-			shotStartAngle:GetNormalized(),
-			cone, 
-			0,
-			self.Primary.Force, 
-			self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
-			self.Primary.Ammo, 
-			remainingPenetration,
-			remainingRicochets,
-			shotStartAngle
-		)
-	end)
+	self:ShootBullet(
+		1, 
+		trace.endpos,
+		shotStartNormal,
+		cone, 
+		0,
+		self.Primary.Force, 
+		self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
+		self.Primary.Ammo, 
+		remainingPenetration,
+		remainingRicochets,
+		shotStartAngle)
 end
 
 function SWEP:Ricochet(tr, remainingPenetration, remainingRicochets, shotStartAngle, reflectVector )
-   	timer.Simple(0, function() 
-		self:ShootBullet(
-			1, 
-			tr.HitPos,
-			reflectVector,
-			cone, 
-			0,
-			self.Primary.Force, 
-			self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
-			self.Primary.Ammo, 
-			remainingPenetration,
-			remainingRicochets-1,
-			shotStartAngle
-		)
-	end)
+	self:ShootBullet(
+		1, 
+		tr.HitPos,
+		reflectVector,
+		cone, 
+		0,
+		self.Primary.Force, 
+		self.Primary.Damage*(remainingPenetration/self.Primary.Penetration), 
+		self.Primary.Ammo, 
+		remainingPenetration,
+		remainingRicochets-1,
+		reflectVector:GetNormalized())
 end
 
 function SWEP:OnDoorShot(door)
@@ -475,7 +619,7 @@ function SWEP:OnDoorShot(door)
 		--Once its open, then delete it.
 		--WIP NEED FIX FOR DOUBLE DOORS
 		door:RemoveAllDecals();
-		--door:Input("Open")
+		door:Input("Open")
 		door:DrawShadow(false);
 		door:SetMaterial("NULL")
 		door:SetSolid(0);
@@ -504,7 +648,7 @@ function SWEP:Recoil()
 	eyeAngle.p = eyeAngle.p + vRecoil;
 	eyeAngle.y = eyeAngle.y - hRecoil;
 	
-	self.CurrViewPunch = self.CurrViewPunch + Angle(vRecoil, hRecoil, 0)
+	self.CurrViewPunch =  Angle(vRecoil, hRecoil, 0)
 
 	self.LerpRatio = 0.01;
 	self.ViewPunchResetTime = CurTime() + self.ViewPunchResetDelay
